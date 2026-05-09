@@ -1,11 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import LoginPage    from './pages/auth/LoginPage'
-import CuentasPage  from './pages/cuentas/CuentasPage'
-import MenuPage     from './pages/menu/MenuPage'
-import CajaPage     from './pages/caja/CajaPage'
-import ReportesPage from './pages/reportes/ReportesPage'
-import BottomNav    from './components/layout/BottomNav'
+import LoginPage      from './pages/auth/LoginPage'
+import CuentasPage    from './pages/cuentas/CuentasPage'
+import MenuPage       from './pages/menu/MenuPage'
+import CajaPage       from './pages/caja/CajaPage'
+import ReportesPage   from './pages/reportes/ReportesPage'
+import InventarioPage from './pages/inventario/InventarioPage'
+import BottomNav      from './components/layout/BottomNav'
 
 function AppRoutes() {
   const { user, loading, isDueno } = useAuth()
@@ -28,12 +29,13 @@ function AppRoutes() {
   return (
     <div className="max-w-md mx-auto min-h-screen relative">
       <Routes>
-        <Route path="/"         element={<Navigate to="/cuentas" replace />} />
-        <Route path="/cuentas"  element={<CuentasPage />} />
-        <Route path="/menu"     element={<MenuPage />} />
-        <Route path="/caja"     element={<CajaPage />} />
+        <Route path="/"            element={<Navigate to="/cuentas" replace />} />
+        <Route path="/cuentas"     element={<CuentasPage />} />
+        <Route path="/menu"        element={<MenuPage />} />
+        <Route path="/caja"        element={<CajaPage />} />
+        <Route path="/inventario"  element={<InventarioPage />} />
         {isDueno && <Route path="/reportes" element={<ReportesPage />} />}
-        <Route path="*"         element={<Navigate to="/cuentas" replace />} />
+        <Route path="*"            element={<Navigate to="/cuentas" replace />} />
       </Routes>
       <BottomNav />
     </div>

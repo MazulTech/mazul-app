@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import AppHeader from '../../components/layout/AppHeader'
+import NuevaCuentaModal from './NuevaCuentaModal'
+import NuevoCargoModal from './NuevoCargoModal'
+import DetalleCuentaModal from './DetalleCuentaModal'
 
 const EMOJI = { villa: '🏡', externo: '👤' }
 
 export default function CuentasPage() {
   const [cuentas, setCuentas] = useState([])
-  const [tab, setTab]         = useState('villas')
+  const [tab, setTab] = useState('villas')
   const [loading, setLoading] = useState(true)
+  const [showNueva, setShowNueva] = useState(false)
+  const [cuentaDetalle, setCuentaDetalle] = useState(null)
+  const [cuentaCargo, setCuentaCargo] = useState(null)
 
   useEffect(() => { fetchCuentas() }, [])
 
@@ -31,7 +37,10 @@ export default function CuentasPage() {
         title="Cuentas abiertas"
         subtitle={`${cuentas.filter(c=>c.tipo==='villa').length} villas · ${cuentas.filter(c=>c.tipo==='externo').length} externos`}
         action={
-          <button className="text-xs bg-mazul-moss text-mazul-cream px-3 py-1.5 rounded-lg font-medium">
+          <button
+            onClick={() => setShowNueva(true)}
+            className="text-xs bg-mazul-moss text-mazul-cream px-3 py-1.5 rounded-lg font-medium"
+          >
             + Cuenta
           </button>
         }
@@ -61,16 +70,51 @@ export default function CuentasPage() {
           <div className="text-center py-12">
             <p className="text-4xl mb-3">🌿</p>
             <p className="text-mazul-stone text-sm">No hay cuentas abiertas</p>
+            <button
+              onClick={() => setShowNueva(true)}
+              className="mt-4 text-xs bg-mazul-moss text-mazul-cream px-4 py-2 rounded-lg font-medium"
+            >
+              + Abrir primera cuenta
+            </button>
           </div>
         ) : (
-          filtradas.map(c => <CuentaCard key={c.id} cuenta={c} onRefresh={fetchCuentas} />)
+          filtradas.map(c => (
+            <CuentaCard
+              key={c.id}
+              cuenta={c}
+              onDetalle={() => setCuentaDetalle(c)}
+              onCargo={() => setCuentaCargo(c)}
+            />
+          ))
         )}
       </div>
+
+      {/* Modales */}
+      {showNueva && (
+        <NuevaCuentaModal
+          onClose={() => setShowNueva(false)}
+          onCreated={() => { setShowNueva(false); fetchCuentas() }}
+        />
+      )}
+      {cuentaDetalle && (
+        <DetalleCuentaModal
+          cuenta={cuentaDetalle}
+          onClose={() => setCuentaDetalle(null)}
+          onUpdated={() => { setCuentaDetalle(null); fetchCuentas() }}
+        />
+      )}
+      {cuentaCargo && (
+        <NuevoCargoModal
+          cuenta={cuentaCargo}
+          onClose={() => setCuentaCargo(null)}
+          onSaved={() => { setCuentaCargo(null); fetchCuentas() }}
+        />
+      )}
     </div>
   )
 }
 
-function CuentaCard({ cuenta, onRefresh }) {
+function CuentaCard({ cuenta, onDetalle, onCargo }) {
   const dias = cuenta.dias_abierta ?? 0
   const alerta = dias >= 2
 
@@ -88,7 +132,7 @@ function CuentaCard({ cuenta, onRefresh }) {
             {EMOJI[cuenta.tipo]} {cuenta.nombre}
           </p>
           <p className="text-xs text-mazul-stone mt-0.5">
-            {cuenta.num_cargos} cargos · abierta hace {dias === 0 ? 'hoy' : `${dias}d`}
+            {cuenta.num_cargos} cargos · {dias === 0 ? 'abierta hoy' : `hace ${dias}d`}
           </p>
         </div>
         <div className="text-right ml-3 flex-shrink-0">
@@ -99,8 +143,8 @@ function CuentaCard({ cuenta, onRefresh }) {
         </div>
       </div>
       <div className="flex gap-2 mt-3">
-        <button className="btn-secondary text-xs py-2">Ver detalle</button>
-        <button className="btn-primary text-xs py-2">+ Cargo</button>
+        <button className="btn-secondary text-xs py-2" onClick={onDetalle}>Ver detalle</button>
+        <button className="btn-primary text-xs py-2" onClick={onCargo}>+ Cargo</button>
       </div>
     </div>
   )

@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { font-family: 'Inter', system-ui, sans-serif; }
+  body { background-color: #F5F0E8; color: #2C2416; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply w-full py-3 px-4 bg-mazul-moss text-mazul-cream rounded-xl font-medium text-sm
+           active:opacity-80 transition-opacity disabled:opacity-40;
+  }
+  .btn-secondary {
+    @apply w-full py-3 px-4 border border-mazul-sand text-mazul-bark rounded-xl font-medium text-sm
+           active:opacity-80 transition-opacity bg-white/60;
+  }
+  .btn-danger {
+    @apply w-full py-3 px-4 bg-red-50 text-red-700 border border-red-200 rounded-xl font-medium text-sm
+           active:opacity-80 transition-opacity;
+  }
+  .card { @apply bg-white rounded-2xl border border-mazul-sand/60 shadow-sm; }
+  .card-compact { @apply bg-white rounded-xl border border-mazul-sand/60 p-3; }
+  .input {
+    @apply w-full bg-mazul-mist border border-mazul-sand rounded-xl px-4 py-3
+           text-sm text-mazul-bark placeholder-mazul-stone/60
+           focus:outline-none focus:border-mazul-moss transition-colors;
+  }
+  .input-label { @apply block text-xs font-medium text-mazul-stone uppercase tracking-wide mb-1.5; }
+  .section-title { @apply text-xs font-semibold text-mazul-stone uppercase tracking-widest mb-2; }
+  .badge-green  { @apply text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-800; }
+  .badge-amber  { @apply text-xs px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-800; }
+  .badge-red    { @apply text-xs px-2 py-0.5 rounded-full font-medium bg-red-50 text-red-700; }
+  .badge-blue   { @apply text-xs px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-700; }
+  .badge-stone  { @apply text-xs px-2 py-0.5 rounded-full font-medium bg-mazul-sand/60 text-mazul-stone; }
+  .nav-tab { @apply flex flex-col items-center gap-0.5 py-2 px-3 text-mazul-stone transition-colors; }
+  .nav-tab.active { @apply text-mazul-moss; }
+}
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }

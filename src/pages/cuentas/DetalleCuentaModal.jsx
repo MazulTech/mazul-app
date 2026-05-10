@@ -4,20 +4,22 @@ import { useAuth } from '../../context/AuthContext'
 import NuevoCargoModal from './NuevoCargoModal'
 
 const PAGOS = [
-  { id: 'efectivo',      label: 'Efectivo',       icon: '💵' },
-  { id: 'tarjeta',       label: 'Tarjeta',         icon: '💳' },
-  { id: 'transferencia', label: 'Transferencia',   icon: '📲' },
-  { id: 'a_la_villa',    label: 'A la villa',       icon: '🏡' },
+  { id: 'efectivo',      label: 'Efectivo',     icon: '💵' },
+  { id: 'tarjeta',       label: 'Tarjeta',       icon: '💳' },
+  { id: 'transferencia', label: 'Transferencia', icon: '📲' },
+  { id: 'a_la_villa',    label: 'A la villa',    icon: '🏡' },
 ]
 
 export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
   const { user } = useAuth()
-  const [cargos, setCargos] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showCargo, setShowCargo] = useState(false)
+  const [cargos, setCargos]         = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [showCargo, setShowCargo]   = useState(false)
   const [showCierre, setShowCierre] = useState(false)
-  const [formaPago, setFormaPago] = useState('efectivo')
-  const [cerrando, setCerrando] = useState(false)
+  const [formaPago, setFormaPago]   = useState('efectivo')
+  const [descuento, setDescuento]   = useState('')
+  const [tipoDesc, setTipoDesc]     = useState('pct') // 'pct' o 'monto'
+  const [cerrando, setCerrando]     = useState(false)
 
   useEffect(() => { fetchCargos() }, [])
 
@@ -32,29 +34,29 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
     setLoading(false)
   }
 
-  const total = cargos.reduce((s, c) => s + Number(c.subtotal), 0)
+  const subtotal = cargos.reduce((s, c) => s + Number(c.subtotal), 0)
+  
+  const descVal = Number(descuento) || 0
+  const descMonto = tipoDesc === 'pct'
+    ? subtotal * (descVal / 100)
+    : Math.min(descVal, subtotal)
+  const total = Math.max(0, subtotal - descMonto)
 
   async function handleCerrar() {
     setCerrando(true)
     const { error } = await supabase.from('cuentas').update({
-      estado: 'cerrada',
-      forma_pago: formaPago,
+      estado:        'cerrada',
+      forma_pago:    formaPago,
       total_cobrado: total,
-      cerrada_por: user.id,
-      closed_at: new Date().toISOString(),
+      cerrada_por:   user.id,
+      closed_at:     new Date().toISOString(),
+      nota_cierre:   descMonto > 0
+        ? `Descuento: ${tipoDesc === 'pct' ? `${descVal}%` : `$${descMonto.toFixed(0)}`} (-$${descMonto.toFixed(0)})`
+        : null,
     }).eq('id', cuenta.id)
     setCerrando(false)
     if (!error) onUpdated()
   }
-
-  // Agrupar por platillo para resumen
-  const resumen = cargos.reduce((acc, c) => {
-    const key = c.platillos?.nombre || 'Desconocido'
-    if (!acc[key]) acc[key] = { emoji: c.platillos?.emoji || '🍽️', total: 0, unidades: 0 }
-    acc[key].total += Number(c.subtotal)
-    acc[key].unidades += c.cantidad
-    return acc
-  }, {})
 
   if (showCargo) return (
     <NuevoCargoModal
@@ -77,7 +79,7 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
               <p className="text-xs text-mazul-stone capitalize">{cuenta.tipo} · {cuenta.dias_abierta === 0 ? 'abierta hoy' : `${cuenta.dias_abierta} día(s)`}</p>
             </div>
             <div className="text-right">
-              <p className="text-xl font-semibold text-mazul-bark">${total.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</p>
+              <p className="text-xl font-semibold text-mazul-bark">${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</p>
               <p className="text-xs text-mazul-stone">{cargos.length} cargos</p>
             </div>
           </div>
@@ -112,11 +114,11 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
           )}
         </div>
 
-        {/* Cierre */}
+        {/* Panel de cierre */}
         {showCierre && (
           <div className="px-5 pb-3 flex-shrink-0 border-t border-mazul-sand/60">
             <p className="section-title mt-4">Forma de cobro</p>
-            <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="grid grid-cols-2 gap-2 mb-4">
               {PAGOS.map(p => (
                 <button
                   key={p.id}
@@ -131,10 +133,58 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
                 </button>
               ))}
             </div>
-            <div className="bg-mazul-bark rounded-xl p-3 mb-3 flex justify-between items-center">
-              <span className="text-mazul-cream/70 text-sm">Total a cobrar</span>
-              <span className="text-mazul-cream text-lg font-semibold">${total.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
+
+            {/* Descuento */}
+            <p className="section-title">Descuento <span className="normal-case font-normal text-mazul-stone">(opcional)</span></p>
+            <div className="flex gap-2 mb-2">
+              <button
+                onClick={() => setTipoDesc('pct')}
+                className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${tipoDesc === 'pct' ? 'bg-mazul-moss text-mazul-cream border-mazul-moss' : 'border-mazul-sand text-mazul-stone bg-white/60'}`}
+              >
+                % Porcentaje
+              </button>
+              <button
+                onClick={() => setTipoDesc('monto')}
+                className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${tipoDesc === 'monto' ? 'bg-mazul-moss text-mazul-cream border-mazul-moss' : 'border-mazul-sand text-mazul-stone bg-white/60'}`}
+              >
+                $ Monto fijo
+              </button>
             </div>
+            <div className="relative mb-3">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-mazul-stone text-sm">
+                {tipoDesc === 'pct' ? '%' : '$'}
+              </span>
+              <input
+                className="input pl-8"
+                type="number"
+                min="0"
+                max={tipoDesc === 'pct' ? '100' : subtotal}
+                placeholder="0"
+                value={descuento}
+                onChange={e => setDescuento(e.target.value)}
+              />
+            </div>
+
+            {/* Resumen */}
+            <div className="bg-mazul-bark rounded-xl p-4 mb-3 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-mazul-cream/60 text-xs">Subtotal</span>
+                <span className="text-mazul-cream/80 text-sm">${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
+              </div>
+              {descMonto > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-mazul-amber text-xs">
+                    Descuento {tipoDesc === 'pct' ? `${descVal}%` : ''}
+                  </span>
+                  <span className="text-mazul-amber text-sm">-${descMonto.toFixed(0)}</span>
+                </div>
+              )}
+              <div className="border-t border-mazul-cream/20 pt-2 flex justify-between items-center">
+                <span className="text-mazul-cream text-sm font-medium">Total a cobrar</span>
+                <span className="text-mazul-cream text-xl font-semibold">${total.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
+              </div>
+            </div>
+
             <button className="btn-primary" onClick={handleCerrar} disabled={cerrando}>
               {cerrando ? 'Cerrando…' : '✓ Confirmar cobro y cerrar cuenta'}
             </button>

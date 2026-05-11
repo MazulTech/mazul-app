@@ -16,7 +16,11 @@ export default function CajaPage() {
     const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).toISOString()
 
     const [{ data: cerradas }, { data: openData }] = await Promise.all([
-      supabase.from('cuentas').select('*').eq('estado', 'cerrada').gte('closed_at', inicio).order('closed_at', { ascending: false }),
+      supabase.from('cuentas')
+        .select('*, abierta:profiles!cuentas_abierta_por_fkey(nombre), cerrada:profiles!cuentas_cerrada_por_fkey(nombre)')
+        .eq('estado', 'cerrada')
+        .gte('closed_at', inicio)
+        .order('closed_at', { ascending: false }),
       supabase.from('cuentas_activas').select('*').order('created_at', { ascending: false }),
     ])
 
@@ -31,7 +35,6 @@ export default function CajaPage() {
 
   const hoy = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
-  // Totales por forma de pago
   const porPago = {}
   cierres.forEach(c => {
     const fp = c.forma_pago ?? 'sin_registrar'
@@ -44,9 +47,16 @@ export default function CajaPage() {
 
     const filasCerradas = cierres.map(c => `
       <tr>
-        <td>${c.nombre}</td>
+        <td>
+          <strong>${c.nombre}</strong><br>
+          <span style="font-size:10px;color:#7A6E5F">
+            Abierta por: ${c.abierta?.nombre ?? '—'} &nbsp;·&nbsp;
+            Cerrada por: ${c.cerrada?.nombre ?? '—'}
+          </span>
+          ${c.nota_cierre ? `<br><span style="font-size:10px;color:#7A6E5F">${c.nota_cierre}</span>` : ''}
+        </td>
         <td>${new Date(c.closed_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</td>
-        <td style="text-align:right">${(c.forma_pago ?? '').replace('_', ' ')}</td>
+        <td style="text-align:right;text-transform:capitalize">${(c.forma_pago ?? '').replace('_', ' ')}</td>
         <td style="text-align:right">$${Number(c.total_cobrado).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
       </tr>`).join('')
 
@@ -80,7 +90,7 @@ export default function CajaPage() {
     .section { margin-bottom: 20px; }
     .section-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: #7A6E5F; border-bottom: 0.5px solid #E8DCC8; padding-bottom: 6px; margin-bottom: 10px; }
     table { width: 100%; border-collapse: collapse; }
-    td { padding: 6px 4px; border-bottom: 0.5px solid #F0EDE8; vertical-align: top; }
+    td { padding: 7px 4px; border-bottom: 0.5px solid #F0EDE8; vertical-align: top; line-height: 1.5; }
     tr:last-child td { border-bottom: none; }
     .kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 20px; }
     .kpi { border: 0.5px solid #E8DCC8; border-radius: 8px; padding: 10px; text-align: center; }
@@ -91,10 +101,7 @@ export default function CajaPage() {
     .total-val { font-size: 22px; font-weight: 600; }
     .footer { text-align: center; font-size: 9px; color: #7A6E5F; margin-top: 24px; padding-top: 12px; border-top: 0.5px solid #E8DCC8; }
     .badge-abierta { background: #FFF3CD; color: #856404; padding: 2px 6px; border-radius: 4px; font-size: 9px; }
-    @media print {
-      body { padding: 12px; }
-      .no-print { display: none; }
-    }
+    @media print { body { padding: 12px; } }
   </style>
 </head>
 <body>
@@ -121,9 +128,7 @@ export default function CajaPage() {
 
   <div class="section">
     <div class="section-title">Desglose por forma de pago</div>
-    <table>
-      ${filasPago || '<tr><td colspan="2" style="color:#7A6E5F">Sin cierres hoy</td></tr>'}
-    </table>
+    <table>${filasPago || '<tr><td colspan="2" style="color:#7A6E5F">Sin cierres hoy</td></tr>'}</table>
     <div class="total-row">
       <span class="total-lbl">Total en caja</span>
       <span class="total-val">$${resumen.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
@@ -166,16 +171,12 @@ export default function CajaPage() {
         title="Caja del día"
         subtitle={hoy}
         action={
-          <button
-            onClick={imprimirCorte}
-            className="text-xs bg-mazul-bark text-mazul-cream px-3 py-1.5 rounded-lg font-medium flex items-center gap-1"
-          >
+          <button onClick={imprimirCorte} className="text-xs bg-mazul-bark text-mazul-cream px-3 py-1.5 rounded-lg font-medium">
             🖨️ Corte
           </button>
         }
       />
 
-      {/* Resumen */}
       <div className="px-4 pt-4">
         <div className="grid grid-cols-3 gap-3 mb-4">
           <MetricCard label="Total del día" value={`$${resumen.total.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`} color="text-mazul-moss" />
@@ -183,7 +184,6 @@ export default function CajaPage() {
           <MetricCard label="Ticket promedio" value={`$${resumen.ticket.toFixed(0)}`} />
         </div>
 
-        {/* Forma de pago */}
         <div className="card p-4 mb-4">
           <p className="section-title">Por forma de pago</p>
           {Object.entries(porPago).length === 0 ? (
@@ -191,14 +191,11 @@ export default function CajaPage() {
           ) : Object.entries(porPago).map(([fp, monto]) => (
             <div key={fp} className="flex justify-between items-center py-2 border-b border-mazul-sand/40 last:border-0">
               <span className="text-sm text-mazul-bark capitalize">{fp.replace('_', ' ')}</span>
-              <span className="text-sm font-semibold text-mazul-bark">
-                ${monto.toLocaleString('es-MX', { minimumFractionDigits: 0 })}
-              </span>
+              <span className="text-sm font-semibold text-mazul-bark">${monto.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
             </div>
           ))}
         </div>
 
-        {/* Cuentas abiertas */}
         {abiertas.length > 0 && (
           <div className="card p-4 mb-4 border-amber-200">
             <p className="section-title">⏳ Cuentas abiertas ({abiertas.length})</p>
@@ -209,16 +206,13 @@ export default function CajaPage() {
                     <p className="text-sm text-mazul-bark">{c.nombre}</p>
                     <p className="text-xs text-mazul-stone">{c.num_cargos} cargos · {c.dias_abierta === 0 ? 'hoy' : `${c.dias_abierta}d`}</p>
                   </div>
-                  <span className="text-sm font-semibold text-amber-700">
-                    ${Number(c.total_acumulado).toLocaleString('es-MX', { minimumFractionDigits: 0 })}
-                  </span>
+                  <span className="text-sm font-semibold text-amber-700">${Number(c.total_acumulado).toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Últimos cierres */}
         <p className="section-title">Cierres de hoy</p>
         {loading ? (
           <div className="text-center py-8 text-mazul-stone text-sm">Cargando…</div>
@@ -230,19 +224,23 @@ export default function CajaPage() {
         ) : (
           <div className="space-y-2">
             {cierres.map(c => (
-              <div key={c.id} className="card-compact flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-mazul-bark">{c.nombre}</p>
-                  <p className="text-xs text-mazul-stone">
-                    {new Date(c.closed_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                    {' · '}
-                    <span className="capitalize">{c.forma_pago?.replace('_', ' ')}</span>
-                    {c.nota_cierre && ` · ${c.nota_cierre}`}
-                  </p>
+              <div key={c.id} className="card-compact">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-mazul-bark">{c.nombre}</p>
+                    <p className="text-xs text-mazul-stone">
+                      {new Date(c.closed_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                      {' · '}<span className="capitalize">{c.forma_pago?.replace('_', ' ')}</span>
+                    </p>
+                    <p className="text-xs text-mazul-stone/70">
+                      Abierta: {c.abierta?.nombre ?? '—'} · Cerrada: {c.cerrada?.nombre ?? '—'}
+                    </p>
+                    {c.nota_cierre && <p className="text-xs text-mazul-amber">{c.nota_cierre}</p>}
+                  </div>
+                  <span className="text-sm font-semibold text-mazul-moss ml-3 flex-shrink-0">
+                    ${Number(c.total_cobrado).toLocaleString('es-MX', { minimumFractionDigits: 0 })}
+                  </span>
                 </div>
-                <span className="text-sm font-semibold text-mazul-moss">
-                  ${Number(c.total_cobrado).toLocaleString('es-MX', { minimumFractionDigits: 0 })}
-                </span>
               </div>
             ))}
           </div>

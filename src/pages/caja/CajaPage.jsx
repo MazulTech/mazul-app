@@ -228,6 +228,11 @@ export default function CajaPage() {
                     </p>
                     <p className="text-xs text-mazul-stone/70">Abierta: {c.abierta?.nombre??'—'} · Cerrada: {c.cerrada?.nombre??'—'}</p>
                     {c.nota_cierre && <p className="text-xs text-mazul-amber">{c.nota_cierre}</p>}
+                    {c.comprobante_url && (
+                      <a href={c.comprobante_url} target="_blank" rel="noreferrer">
+                        <img src={c.comprobante_url} alt="Comprobante" className="mt-2 w-full max-h-32 object-cover rounded-lg border border-mazul-sand" />
+                      </a>
+                    )}
                   </div>
                   <span className="text-sm font-semibold text-mazul-moss ml-3 flex-shrink-0">
                     ${Number(c.total_cobrado).toLocaleString('es-MX',{minimumFractionDigits:0})}

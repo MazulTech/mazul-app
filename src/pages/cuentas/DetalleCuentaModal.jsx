@@ -12,16 +12,19 @@ const PAGOS = [
 
 export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
   const { user, isDueno } = useAuth()
-  const [cargos, setCargos]         = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [showCargo, setShowCargo]   = useState(false)
-  const [showCierre, setShowCierre] = useState(false)
-  const [formaPago, setFormaPago]   = useState('efectivo')
-  const [descuento, setDescuento]   = useState('')
-  const [tipoDesc, setTipoDesc]     = useState('pct')
-  const [cerrando, setCerrando]     = useState(false)
-  const [borrando, setBorrando]     = useState(null)
+  const [cargos, setCargos]             = useState([])
+  const [loading, setLoading]           = useState(true)
+  const [showCargo, setShowCargo]       = useState(false)
+  const [showCierre, setShowCierre]     = useState(false)
+  const [formaPago, setFormaPago]       = useState('efectivo')
+  const [descuento, setDescuento]       = useState('')
+  const [tipoDesc, setTipoDesc]         = useState('pct')
+  const [cerrando, setCerrando]         = useState(false)
+  const [borrando, setBorrando]         = useState(null)
   const [confirmBorrar, setConfirmBorrar] = useState(null)
+  const [comprobante, setComprobante]   = useState(null)
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
+  const [comprobanteUrl, setComprobanteUrl] = useState(null)
 
   useEffect(() => { fetchCargos() }, [])
 
@@ -41,6 +44,13 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
   const descMonto = tipoDesc === 'pct' ? subtotal * (descVal / 100) : Math.min(descVal, subtotal)
   const total     = Math.max(0, subtotal - descMonto)
 
+  async function handleSeleccionarFoto(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setComprobante(file)
+    setComprobanteUrl(URL.createObjectURL(file))
+  }
+
   async function handleBorrarCargo(cargoId) {
     setBorrando(cargoId)
     await supabase.from('cargos').delete().eq('id', cargoId)
@@ -52,16 +62,37 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
 
   async function handleCerrar() {
     setCerrando(true)
+
+    let urlFoto = null
+
+    // Subir foto si hay
+    if (comprobante) {
+      setSubiendoFoto(true)
+      const ext      = comprobante.name.split('.').pop()
+      const fileName = `${cuenta.id}-${Date.now()}.${ext}`
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('comprobantes')
+        .upload(fileName, comprobante, { contentType: comprobante.type })
+
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(fileName)
+        urlFoto = urlData?.publicUrl ?? null
+      }
+      setSubiendoFoto(false)
+    }
+
     const { error } = await supabase.from('cuentas').update({
-      estado:        'cerrada',
-      forma_pago:    formaPago,
-      total_cobrado: total,
-      cerrada_por:   user.id,
-      closed_at:     new Date().toISOString(),
-      nota_cierre:   descMonto > 0
+      estado:           'cerrada',
+      forma_pago:       formaPago,
+      total_cobrado:    total,
+      cerrada_por:      user.id,
+      closed_at:        new Date().toISOString(),
+      nota_cierre:      descMonto > 0
         ? `Descuento: ${tipoDesc === 'pct' ? `${descVal}%` : `$${descMonto.toFixed(0)}`} (-$${descMonto.toFixed(0)})`
         : null,
+      comprobante_url:  urlFoto,
     }).eq('id', cuenta.id)
+
     setCerrando(false)
     if (!error) onUpdated()
   }
@@ -108,24 +139,14 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
               {cargos.map(c => (
                 <div key={c.id} className={`card-compact ${confirmBorrar === c.id ? 'border-red-200 bg-red-50/30' : ''}`}>
                   {confirmBorrar === c.id ? (
-                    /* Confirmación de borrado */
                     <div className="space-y-2">
                       <p className="text-sm font-medium text-red-700">¿Borrar este cargo?</p>
                       <p className="text-xs text-mazul-stone">{c.platillos?.emoji} {c.platillos?.nombre} ×{c.cantidad} — ${Number(c.subtotal).toLocaleString('es-MX')}</p>
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => handleBorrarCargo(c.id)}
-                          disabled={borrando === c.id}
-                          className="flex-1 py-2 bg-red-600 text-white rounded-lg text-xs font-medium"
-                        >
+                        <button onClick={() => handleBorrarCargo(c.id)} disabled={borrando === c.id} className="flex-1 py-2 bg-red-600 text-white rounded-lg text-xs font-medium">
                           {borrando === c.id ? 'Borrando…' : 'Sí, borrar'}
                         </button>
-                        <button
-                          onClick={() => setConfirmBorrar(null)}
-                          className="flex-1 py-2 border border-mazul-sand text-mazul-stone rounded-lg text-xs"
-                        >
-                          Cancelar
-                        </button>
+                        <button onClick={() => setConfirmBorrar(null)} className="flex-1 py-2 border border-mazul-sand text-mazul-stone rounded-lg text-xs">Cancelar</button>
                       </div>
                     </div>
                   ) : (
@@ -142,13 +163,7 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="text-sm font-semibold text-mazul-moss">+${Number(c.subtotal).toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
                         {isDueno && (
-                          <button
-                            onClick={() => setConfirmBorrar(c.id)}
-                            className="w-6 h-6 rounded-full bg-red-50 text-red-400 flex items-center justify-center text-xs hover:bg-red-100"
-                            title="Borrar cargo"
-                          >
-                            ×
-                          </button>
+                          <button onClick={() => setConfirmBorrar(c.id)} className="w-6 h-6 rounded-full bg-red-50 text-red-400 flex items-center justify-center text-xs">×</button>
                         )}
                       </div>
                     </div>
@@ -161,34 +176,48 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
 
         {/* Panel de cierre */}
         {showCierre && (
-          <div className="px-5 pb-3 flex-shrink-0 border-t border-mazul-sand/60">
+          <div className="px-5 pb-3 flex-shrink-0 border-t border-mazul-sand/60 overflow-y-auto" style={{ maxHeight: '60vh' }}>
             <p className="section-title mt-4">Forma de cobro</p>
             <div className="grid grid-cols-2 gap-2 mb-4">
               {PAGOS.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => setFormaPago(p.id)}
+                <button key={p.id} onClick={() => setFormaPago(p.id)}
                   className={`py-3 rounded-xl text-sm font-medium border transition-colors flex items-center justify-center gap-2 ${
-                    formaPago === p.id
-                      ? 'bg-mazul-moss text-mazul-cream border-mazul-moss'
-                      : 'border-mazul-sand text-mazul-stone bg-white/60'
-                  }`}
-                >
+                    formaPago === p.id ? 'bg-mazul-moss text-mazul-cream border-mazul-moss' : 'border-mazul-sand text-mazul-stone bg-white/60'
+                  }`}>
                   {p.icon} {p.label}
                 </button>
               ))}
             </div>
 
+            {/* Comprobante de pago */}
+            <p className="section-title">Comprobante <span className="normal-case font-normal text-mazul-stone">(opcional)</span></p>
+            {comprobanteUrl ? (
+              <div className="relative mb-3">
+                <img src={comprobanteUrl} alt="Comprobante" className="w-full rounded-xl object-cover max-h-40" />
+                <button
+                  onClick={() => { setComprobante(null); setComprobanteUrl(null) }}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center text-sm"
+                >×</button>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-mazul-sand rounded-xl text-sm text-mazul-stone mb-3 cursor-pointer hover:border-mazul-moss hover:text-mazul-moss transition-colors">
+                📷 Tomar foto o subir comprobante
+                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleSeleccionarFoto} />
+              </label>
+            )}
+
+            {/* Descuento */}
             <p className="section-title">Descuento <span className="normal-case font-normal text-mazul-stone">(opcional)</span></p>
             <div className="flex gap-2 mb-2">
-              <button onClick={() => setTipoDesc('pct')} className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${tipoDesc === 'pct' ? 'bg-mazul-moss text-mazul-cream border-mazul-moss' : 'border-mazul-sand text-mazul-stone bg-white/60'}`}>% Porcentaje</button>
-              <button onClick={() => setTipoDesc('monto')} className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${tipoDesc === 'monto' ? 'bg-mazul-moss text-mazul-cream border-mazul-moss' : 'border-mazul-sand text-mazul-stone bg-white/60'}`}>$ Monto fijo</button>
+              <button onClick={() => setTipoDesc('pct')} className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${tipoDesc==='pct'?'bg-mazul-moss text-mazul-cream border-mazul-moss':'border-mazul-sand text-mazul-stone bg-white/60'}`}>% Porcentaje</button>
+              <button onClick={() => setTipoDesc('monto')} className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${tipoDesc==='monto'?'bg-mazul-moss text-mazul-cream border-mazul-moss':'border-mazul-sand text-mazul-stone bg-white/60'}`}>$ Monto fijo</button>
             </div>
             <div className="relative mb-3">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-mazul-stone text-sm">{tipoDesc === 'pct' ? '%' : '$'}</span>
-              <input className="input pl-8" type="number" min="0" max={tipoDesc === 'pct' ? '100' : subtotal} placeholder="0" value={descuento} onChange={e => setDescuento(e.target.value)} />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-mazul-stone text-sm">{tipoDesc==='pct'?'%':'$'}</span>
+              <input className="input pl-8" type="number" min="0" placeholder="0" value={descuento} onChange={e => setDescuento(e.target.value)} />
             </div>
 
+            {/* Resumen */}
             <div className="bg-mazul-bark rounded-xl p-4 mb-3 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-mazul-cream/60 text-xs">Subtotal</span>
@@ -196,7 +225,7 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
               </div>
               {descMonto > 0 && (
                 <div className="flex justify-between items-center">
-                  <span className="text-mazul-amber text-xs">Descuento {tipoDesc === 'pct' ? `${descVal}%` : ''}</span>
+                  <span className="text-mazul-amber text-xs">Descuento {tipoDesc==='pct'?`${descVal}%`:''}</span>
                   <span className="text-mazul-amber text-sm">-${descMonto.toFixed(0)}</span>
                 </div>
               )}
@@ -206,8 +235,8 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
               </div>
             </div>
 
-            <button className="btn-primary" onClick={handleCerrar} disabled={cerrando}>
-              {cerrando ? 'Cerrando…' : '✓ Confirmar cobro y cerrar cuenta'}
+            <button className="btn-primary" onClick={handleCerrar} disabled={cerrando || subiendoFoto}>
+              {subiendoFoto ? 'Subiendo foto…' : cerrando ? 'Cerrando…' : '✓ Confirmar cobro y cerrar cuenta'}
             </button>
             <button className="btn-secondary mt-2" onClick={() => setShowCierre(false)}>Cancelar</button>
           </div>

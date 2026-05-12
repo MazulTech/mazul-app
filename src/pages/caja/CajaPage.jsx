@@ -17,8 +17,12 @@ export default function CajaPage() {
 
   async function fetchCaja() {
     setLoading(true)
-    const inicio = new Date(fecha + 'T00:00:00').toISOString()
-    const fin    = new Date(fecha + 'T23:59:59').toISOString()
+    // Usamos offset local para evitar desfase de zona horaria
+    const [anio, mes, dia] = fecha.split('-').map(Number)
+    const inicioDate = new Date(anio, mes - 1, dia, 0, 0, 0)
+    const finDate    = new Date(anio, mes - 1, dia, 23, 59, 59)
+    const inicio = inicioDate.toISOString()
+    const fin    = finDate.toISOString()
 
     const [{ data: cerradas }, { data: openData }] = await Promise.all([
       supabase.from('cuentas')

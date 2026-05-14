@@ -8,7 +8,7 @@ export default function NuevoInsumoModal({ insumo, onClose, onSaved }) {
   const [form, setForm] = useState({
     nombre:          insumo?.nombre          ?? '',
     unidad:          insumo?.unidad          ?? 'kg',
-    precio_unitario: insumo?.precio_unitario ?? '',
+    precio_unitario: insumo?.precio_unitario ?? 0,
     stock_actual:    insumo?.stock_actual    ?? '',
     stock_minimo:    insumo?.stock_minimo    ?? '',
   })
@@ -70,21 +70,24 @@ export default function NuevoInsumoModal({ insumo, onClose, onSaved }) {
                   {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="input-label">Precio / unidad</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-mazul-stone text-sm">$</span>
-                  <input
-                    className="input pl-8"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={form.precio_unitario}
-                    onChange={e => set('precio_unitario', e.target.value)}
-                  />
+              {editando && (
+                <div>
+                  <label className="input-label">Precio / unidad</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-mazul-stone text-sm">$</span>
+                    <input
+                      className="input pl-8"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={form.precio_unitario}
+                      onChange={e => set('precio_unitario', e.target.value)}
+                    />
+                  </div>
+                  <p className="text-[10px] text-mazul-stone mt-1">Se actualiza automáticamente con cada compra</p>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

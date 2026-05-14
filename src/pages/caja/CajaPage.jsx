@@ -44,11 +44,32 @@ export default function CajaPage() {
 
   const esHoy = fecha === fechaLocal(new Date())
 
+  // Calcular totales por forma de pago — incluyendo pagos mixtos
   const porPago = {}
   cierres.forEach(c => {
-    const fp = c.forma_pago ?? 'sin_registrar'
-    porPago[fp] = (porPago[fp] || 0) + Number(c.total_cobrado ?? 0)
+    const fp    = c.forma_pago ?? 'sin_registrar'
+    const monto = Number(c.total_cobrado ?? 0)
+
+    if (fp === 'mixto' && c.nota_cierre) {
+      // Parsear el desglose de la nota: "Efectivo: $290 · Tarjeta: $290"
+      const mapaNombres = { 'Efectivo': 'efectivo', 'Tarjeta': 'tarjeta', 'Transferencia': 'transferencia', 'A la villa': 'a_la_villa' }
+      let encontrado = false
+      Object.entries(mapaNombres).forEach(([label, key]) => {
+        const match = c.nota_cierre.match(new RegExp(label + ':\\s*\\$([\\d,]+)'))
+        if (match) {
+          const val = Number(match[1].replace(',', ''))
+          porPago[key] = (porPago[key] || 0) + val
+          encontrado = true
+        }
+      })
+      if (!encontrado) porPago['mixto'] = (porPago['mixto'] || 0) + monto
+    } else {
+      porPago[fp] = (porPago[fp] || 0) + monto
+    }
   })
+
+  // Etiquetas amigables
+  const labelPago = { efectivo: '💵 Efectivo', tarjeta: '💳 Tarjeta', transferencia: '📲 Transferencia', a_la_villa: '🏡 A la villa', mixto: '🔀 Mixto', sin_registrar: 'Sin registrar' }
 
   const fechaLabel = new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
@@ -187,7 +208,7 @@ export default function CajaPage() {
             ? <p className="text-xs text-mazul-stone text-center py-2">Sin cierres este día</p>
             : Object.entries(porPago).map(([fp, monto]) => (
               <div key={fp} className="flex justify-between items-center py-2 border-b border-mazul-sand/40 last:border-0">
-                <span className="text-sm text-mazul-bark capitalize">{fp.replace('_',' ')}</span>
+                <span className="text-sm text-mazul-bark">{labelPago[fp] ?? fp.replace('_',' ')}</span>
                 <span className="text-sm font-semibold text-mazul-bark">${monto.toLocaleString('es-MX',{minimumFractionDigits:0})}</span>
               </div>
             ))

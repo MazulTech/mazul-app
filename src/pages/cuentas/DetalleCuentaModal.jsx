@@ -12,18 +12,18 @@ const PAGOS = [
 
 export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
   const { user, isDueno } = useAuth()
-  const [cargos, setCargos]             = useState([])
-  const [loading, setLoading]           = useState(true)
-  const [showCargo, setShowCargo]       = useState(false)
-  const [showCierre, setShowCierre]     = useState(false)
-  const [formaPago, setFormaPago]       = useState('efectivo')
-  const [descuento, setDescuento]       = useState('')
-  const [tipoDesc, setTipoDesc]         = useState('pct')
-  const [cerrando, setCerrando]         = useState(false)
-  const [borrando, setBorrando]         = useState(null)
+  const [cargos, setCargos]               = useState([])
+  const [loading, setLoading]             = useState(true)
+  const [showCargo, setShowCargo]         = useState(false)
+  const [showCierre, setShowCierre]       = useState(false)
+  const [montosPago, setMontosPago]       = useState({ efectivo: '', tarjeta: '', transferencia: '', a_la_villa: '' })
+  const [descuento, setDescuento]         = useState('')
+  const [tipoDesc, setTipoDesc]           = useState('pct')
+  const [cerrando, setCerrando]           = useState(false)
+  const [borrando, setBorrando]           = useState(null)
   const [confirmBorrar, setConfirmBorrar] = useState(null)
-  const [comprobante, setComprobante]   = useState(null)
-  const [subiendoFoto, setSubiendoFoto] = useState(false)
+  const [comprobante, setComprobante]     = useState(null)
+  const [subiendoFoto, setSubiendoFoto]   = useState(false)
   const [comprobanteUrl, setComprobanteUrl] = useState(null)
 
   useEffect(() => { fetchCargos() }, [])
@@ -39,10 +39,30 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
     setLoading(false)
   }
 
-  const subtotal  = cargos.reduce((s, c) => s + Number(c.subtotal), 0)
-  const descVal   = Number(descuento) || 0
-  const descMonto = tipoDesc === 'pct' ? subtotal * (descVal / 100) : Math.min(descVal, subtotal)
-  const total     = Math.max(0, subtotal - descMonto)
+  const subtotal   = cargos.reduce((s, c) => s + Number(c.subtotal), 0)
+  const descVal    = Number(descuento) || 0
+  const descMonto  = tipoDesc === 'pct' ? subtotal * (descVal / 100) : Math.min(descVal, subtotal)
+  const total      = Math.max(0, subtotal - descMonto)
+
+  // Calcular total de pagos ingresados
+  const totalPagado = Object.values(montosPago).reduce((s, v) => s + (Number(v) || 0), 0)
+  const diferencia  = total - totalPagado
+  const pagoValido  = Math.abs(diferencia) < 0.01
+
+  // Formas de pago con monto > 0
+  const pagosUsados = PAGOS.filter(p => Number(montosPago[p.id]) > 0)
+  const formaPagoResumen = pagosUsados.map(p => p.id).join('+') || 'efectivo'
+
+  function setMonto(id, val) {
+    setMontosPago(prev => ({ ...prev, [id]: val }))
+  }
+
+  // Autocompletar el último campo pendiente
+  function autocompletar(id) {
+    const otrosTotal = PAGOS.filter(p => p.id !== id).reduce((s, p) => s + (Number(montosPago[p.id]) || 0), 0)
+    const restante = total - otrosTotal
+    if (restante > 0) setMonto(id, restante.toFixed(2))
+  }
 
   async function handleSeleccionarFoto(e) {
     const file = e.target.files[0]
@@ -61,11 +81,10 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
   }
 
   async function handleCerrar() {
+    if (!pagoValido) return
     setCerrando(true)
 
     let urlFoto = null
-
-    // Subir foto si hay
     if (comprobante) {
       setSubiendoFoto(true)
       const ext      = comprobante.name.split('.').pop()
@@ -73,7 +92,6 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('comprobantes')
         .upload(fileName, comprobante, { contentType: comprobante.type })
-
       if (!uploadError) {
         const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(fileName)
         urlFoto = urlData?.publicUrl ?? null
@@ -81,16 +99,23 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
       setSubiendoFoto(false)
     }
 
+    // Nota de cierre con desglose de pagos mixtos
+    const notaPagos = pagosUsados.length > 1
+      ? pagosUsados.map(p => `${p.label}: $${Number(montosPago[p.id]).toFixed(0)}`).join(' · ')
+      : null
+    const notaDesc = descMonto > 0
+      ? `Descuento: ${tipoDesc === 'pct' ? `${descVal}%` : `$${descMonto.toFixed(0)}`} (-$${descMonto.toFixed(0)})`
+      : null
+    const notaCierre = [notaPagos, notaDesc].filter(Boolean).join(' | ') || null
+
     const { error } = await supabase.from('cuentas').update({
-      estado:           'cerrada',
-      forma_pago:       formaPago,
-      total_cobrado:    total,
-      cerrada_por:      user.id,
-      closed_at:        new Date().toISOString(),
-      nota_cierre:      descMonto > 0
-        ? `Descuento: ${tipoDesc === 'pct' ? `${descVal}%` : `$${descMonto.toFixed(0)}`} (-$${descMonto.toFixed(0)})`
-        : null,
-      comprobante_url:  urlFoto,
+      estado:          'cerrada',
+      forma_pago:      formaPagoResumen,
+      total_cobrado:   total,
+      cerrada_por:     user.id,
+      closed_at:       new Date().toISOString(),
+      nota_cierre:     notaCierre,
+      comprobante_url: urlFoto,
     }).eq('id', cuenta.id)
 
     setCerrando(false)
@@ -176,66 +201,81 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
 
         {/* Panel de cierre */}
         {showCierre && (
-          <div className="px-5 pb-3 flex-shrink-0 border-t border-mazul-sand/60 overflow-y-auto" style={{ maxHeight: '60vh' }}>
-            <p className="section-title mt-4">Forma de cobro</p>
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {PAGOS.map(p => (
-                <button key={p.id} onClick={() => setFormaPago(p.id)}
-                  className={`py-3 rounded-xl text-sm font-medium border transition-colors flex items-center justify-center gap-2 ${
-                    formaPago === p.id ? 'bg-mazul-moss text-mazul-cream border-mazul-moss' : 'border-mazul-sand text-mazul-stone bg-white/60'
-                  }`}>
-                  {p.icon} {p.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Comprobante de pago */}
-            <p className="section-title">Comprobante <span className="normal-case font-normal text-mazul-stone">(opcional)</span></p>
-            {comprobanteUrl ? (
-              <div className="relative mb-3">
-                <img src={comprobanteUrl} alt="Comprobante" className="w-full rounded-xl object-cover max-h-40" />
-                <button
-                  onClick={() => { setComprobante(null); setComprobanteUrl(null) }}
-                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center text-sm"
-                >×</button>
-              </div>
-            ) : (
-              <label className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-mazul-sand rounded-xl text-sm text-mazul-stone mb-3 cursor-pointer hover:border-mazul-moss hover:text-mazul-moss transition-colors">
-                📷 Tomar foto o subir comprobante
-                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleSeleccionarFoto} />
-              </label>
-            )}
+          <div className="px-5 pb-3 flex-shrink-0 border-t border-mazul-sand/60 overflow-y-auto" style={{ maxHeight: '65vh' }}>
 
             {/* Descuento */}
-            <p className="section-title">Descuento <span className="normal-case font-normal text-mazul-stone">(opcional)</span></p>
+            <p className="section-title mt-4">Descuento <span className="normal-case font-normal text-mazul-stone">(opcional)</span></p>
             <div className="flex gap-2 mb-2">
               <button onClick={() => setTipoDesc('pct')} className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${tipoDesc==='pct'?'bg-mazul-moss text-mazul-cream border-mazul-moss':'border-mazul-sand text-mazul-stone bg-white/60'}`}>% Porcentaje</button>
               <button onClick={() => setTipoDesc('monto')} className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${tipoDesc==='monto'?'bg-mazul-moss text-mazul-cream border-mazul-moss':'border-mazul-sand text-mazul-stone bg-white/60'}`}>$ Monto fijo</button>
             </div>
-            <div className="relative mb-3">
+            <div className="relative mb-4">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-mazul-stone text-sm">{tipoDesc==='pct'?'%':'$'}</span>
               <input className="input pl-8" type="number" min="0" placeholder="0" value={descuento} onChange={e => setDescuento(e.target.value)} />
             </div>
 
-            {/* Resumen */}
-            <div className="bg-mazul-bark rounded-xl p-4 mb-3 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-mazul-cream/60 text-xs">Subtotal</span>
-                <span className="text-mazul-cream/80 text-sm">${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
-              </div>
-              {descMonto > 0 && (
-                <div className="flex justify-between items-center">
-                  <span className="text-mazul-amber text-xs">Descuento {tipoDesc==='pct'?`${descVal}%`:''}</span>
-                  <span className="text-mazul-amber text-sm">-${descMonto.toFixed(0)}</span>
-                </div>
-              )}
-              <div className="border-t border-mazul-cream/20 pt-2 flex justify-between items-center">
-                <span className="text-mazul-cream text-sm font-medium">Total a cobrar</span>
-                <span className="text-mazul-cream text-xl font-semibold">${total.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
-              </div>
+            {/* Total a pagar */}
+            <div className="bg-mazul-bark/10 rounded-xl px-4 py-3 mb-4 flex justify-between items-center">
+              <span className="text-sm text-mazul-bark font-medium">Total a cobrar</span>
+              <span className="text-lg font-bold text-mazul-bark">${total.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
             </div>
 
-            <button className="btn-primary" onClick={handleCerrar} disabled={cerrando || subiendoFoto}>
+            {/* Pagos mixtos */}
+            <p className="section-title">¿Cómo paga? <span className="normal-case font-normal text-mazul-stone">— puede ser más de una forma</span></p>
+            <div className="space-y-2 mb-3">
+              {PAGOS.map(p => (
+                <div key={p.id} className="flex items-center gap-3">
+                  <span className="text-base w-6 flex-shrink-0">{p.icon}</span>
+                  <span className="text-sm text-mazul-bark w-28 flex-shrink-0">{p.label}</span>
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-mazul-stone text-xs">$</span>
+                    <input
+                      className={`input pl-7 py-2 text-sm ${Number(montosPago[p.id]) > 0 ? 'border-mazul-moss' : ''}`}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0"
+                      value={montosPago[p.id]}
+                      onChange={e => setMonto(p.id, e.target.value)}
+                    />
+                  </div>
+                  {Number(montosPago[p.id]) === 0 && diferencia > 0 && (
+                    <button
+                      onClick={() => autocompletar(p.id)}
+                      className="text-[10px] text-mazul-moss font-medium flex-shrink-0"
+                    >
+                      +${diferencia.toFixed(0)}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Validación de montos */}
+            <div className={`rounded-xl px-4 py-3 mb-3 flex justify-between items-center ${pagoValido ? 'bg-emerald-50 border border-emerald-200' : diferencia > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-red-50 border border-red-200'}`}>
+              <span className={`text-xs font-medium ${pagoValido ? 'text-emerald-700' : diferencia > 0 ? 'text-amber-700' : 'text-red-600'}`}>
+                {pagoValido ? '✓ Monto correcto' : diferencia > 0 ? `Faltan $${diferencia.toFixed(0)}` : `Excede $${Math.abs(diferencia).toFixed(0)}`}
+              </span>
+              <span className={`text-sm font-semibold ${pagoValido ? 'text-emerald-700' : 'text-mazul-stone'}`}>
+                ${totalPagado.toFixed(0)} / ${total.toFixed(0)}
+              </span>
+            </div>
+
+            {/* Comprobante */}
+            <p className="section-title">Comprobante <span className="normal-case font-normal text-mazul-stone">(opcional)</span></p>
+            {comprobanteUrl ? (
+              <div className="relative mb-3">
+                <img src={comprobanteUrl} alt="Comprobante" className="w-full rounded-xl object-cover max-h-36" />
+                <button onClick={() => { setComprobante(null); setComprobanteUrl(null) }} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center text-sm">×</button>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-mazul-sand rounded-xl text-sm text-mazul-stone mb-3 cursor-pointer hover:border-mazul-moss hover:text-mazul-moss transition-colors">
+                📷 Foto del comprobante
+                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleSeleccionarFoto} />
+              </label>
+            )}
+
+            <button className="btn-primary" onClick={handleCerrar} disabled={!pagoValido || cerrando || subiendoFoto}>
               {subiendoFoto ? 'Subiendo foto…' : cerrando ? 'Cerrando…' : '✓ Confirmar cobro y cerrar cuenta'}
             </button>
             <button className="btn-secondary mt-2" onClick={() => setShowCierre(false)}>Cancelar</button>

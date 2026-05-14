@@ -51,7 +51,7 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
 
   // Formas de pago con monto > 0
   const pagosUsados = PAGOS.filter(p => Number(montosPago[p.id]) > 0)
-  const formaPagoResumen = pagosUsados.map(p => p.id).join('+') || 'efectivo'
+  const formaPagoResumen = pagosUsados.length > 1 ? 'mixto' : (pagosUsados[0]?.id || 'efectivo')
 
   function setMonto(id, val) {
     setMontosPago(prev => ({ ...prev, [id]: val }))
@@ -85,16 +85,20 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
     setCerrando(true)
 
     let urlFoto = null
-    if (comprobante) {
+    if (comprobante && comprobante instanceof File) {
       setSubiendoFoto(true)
-      const ext      = comprobante.name.split('.').pop()
-      const fileName = `${cuenta.id}-${Date.now()}.${ext}`
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('comprobantes')
-        .upload(fileName, comprobante, { contentType: comprobante.type })
-      if (!uploadError) {
-        const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(fileName)
-        urlFoto = urlData?.publicUrl ?? null
+      try {
+        const ext      = comprobante.name.split('.').pop()
+        const fileName = `${cuenta.id}-${Date.now()}.${ext}`
+        const { error: uploadError } = await supabase.storage
+          .from('comprobantes')
+          .upload(fileName, comprobante, { contentType: comprobante.type })
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(fileName)
+          urlFoto = urlData?.publicUrl ?? null
+        }
+      } catch (e) {
+        console.error('Error subiendo foto:', e)
       }
       setSubiendoFoto(false)
     }

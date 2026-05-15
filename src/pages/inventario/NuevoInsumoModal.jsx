@@ -3,11 +3,21 @@ import { supabase } from '../../lib/supabase'
 
 const UNIDADES = ['kg', 'g', 'litro', 'ml', 'pieza', 'docena', 'caja', 'bolsa', 'lata', 'botella']
 
+const CATEGORIAS_INSUMO = [
+  { key: 'materia_prima',   label: '🥩 Materia prima'     },
+  { key: 'bebidas',         label: '🍺 Bebidas'            },
+  { key: 'enlatados_secos', label: '🥫 Enlatados / secos'  },
+  { key: 'servicios',       label: '⚡ Servicios'          },
+  { key: 'limpieza',        label: '🧹 Limpieza'           },
+  { key: 'otros',           label: '📦 Otros'              },
+]
+
 export default function NuevoInsumoModal({ insumo, onClose, onSaved }) {
   const editando = !!insumo
   const [form, setForm] = useState({
     nombre:          insumo?.nombre          ?? '',
     unidad:          insumo?.unidad          ?? 'kg',
+    categoria:       insumo?.categoria       ?? 'materia_prima',
     precio_unitario: insumo?.precio_unitario ?? 0,
     stock_actual:    insumo?.stock_actual    ?? '',
     stock_minimo:    insumo?.stock_minimo    ?? '',
@@ -27,6 +37,7 @@ export default function NuevoInsumoModal({ insumo, onClose, onSaved }) {
     const data = {
       nombre:          form.nombre.trim(),
       unidad:          form.unidad,
+      categoria:       form.categoria,
       precio_unitario: Number(form.precio_unitario) || 0,
       stock_actual:    Number(form.stock_actual)    || 0,
       stock_minimo:    Number(form.stock_minimo)    || 0,
@@ -61,6 +72,13 @@ export default function NuevoInsumoModal({ insumo, onClose, onSaved }) {
                 onChange={e => set('nombre', e.target.value)}
                 autoFocus={!editando}
               />
+            </div>
+
+            <div>
+              <label className="input-label">Categoría</label>
+              <select className="input" value={form.categoria} onChange={e => set('categoria', e.target.value)}>
+                {CATEGORIAS_INSUMO.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

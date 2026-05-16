@@ -20,6 +20,7 @@ export default function NuevoCompraModal({ insumos: insumosProp, onClose, onSave
   const [cantidad, setCantidad]     = useState('')
   const [precio, setPrecio]         = useState('')
   const [proveedor, setProveedor]   = useState('')
+  const [formaPago, setFormaPago]   = useState('efectivo')
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState('')
 
@@ -73,6 +74,7 @@ export default function NuevoCompraModal({ insumos: insumosProp, onClose, onSave
       cantidad:       Number(cantidad),
       precio_total:   Number(precio) || null,
       proveedor:      proveedor.trim() || null,
+      forma_pago:     formaPago,
       registrado_por: user.id,
     })
 
@@ -212,6 +214,31 @@ export default function NuevoCompraModal({ insumos: insumosProp, onClose, onSave
               </p>
             </div>
           )}
+
+          <div>
+            <label className="input-label">Forma de pago</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: 'efectivo',      label: '💵 Efectivo'      },
+                { id: 'transferencia', label: '📲 Transferencia'  },
+                { id: 'tarjeta',       label: '💳 Tarjeta'        },
+                { id: 'credito',       label: '📋 Crédito/Fiado'  },
+              ].map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setFormaPago(p.id)}
+                  className={`py-2.5 rounded-xl text-xs font-medium border transition-colors ${
+                    formaPago === p.id
+                      ? 'bg-mazul-moss text-mazul-cream border-mazul-moss'
+                      : 'border-mazul-sand text-mazul-stone bg-white/60'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div>
             <label className="input-label">Proveedor <span className="normal-case font-normal">(opcional)</span></label>

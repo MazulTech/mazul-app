@@ -17,6 +17,7 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
   const [showCargo, setShowCargo]         = useState(false)
   const [showCierre, setShowCierre]       = useState(false)
   const [montosPago, setMontosPago]       = useState({ efectivo: '', tarjeta: '', transferencia: '', a_la_villa: '' })
+  const [propina, setPropina]             = useState('')
   const [descuento, setDescuento]         = useState('')
   const [tipoDesc, setTipoDesc]           = useState('pct')
   const [cerrando, setCerrando]           = useState(false)
@@ -42,11 +43,13 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
   const subtotal   = cargos.reduce((s, c) => s + Number(c.subtotal), 0)
   const descVal    = Number(descuento) || 0
   const descMonto  = tipoDesc === 'pct' ? subtotal * (descVal / 100) : Math.min(descVal, subtotal)
+  const propinaVal = Number(propina) || 0
   const total      = Math.max(0, subtotal - descMonto)
+  const totalConPropina = total + propinaVal
 
   // Calcular total de pagos ingresados
   const totalPagado = Object.values(montosPago).reduce((s, v) => s + (Number(v) || 0), 0)
-  const diferencia  = total - totalPagado
+  const diferencia  = totalConPropina - totalPagado
   const pagoValido  = Math.abs(diferencia) < 0.01
 
   // Formas de pago con monto > 0
@@ -60,7 +63,7 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
   // Autocompletar el último campo pendiente
   function autocompletar(id) {
     const otrosTotal = PAGOS.filter(p => p.id !== id).reduce((s, p) => s + (Number(montosPago[p.id]) || 0), 0)
-    const restante = total - otrosTotal
+    const restante = totalConPropina - otrosTotal
     if (restante > 0) setMonto(id, restante.toFixed(2))
   }
 
@@ -110,12 +113,14 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
     const notaDesc = descMonto > 0
       ? `Descuento: ${tipoDesc === 'pct' ? `${descVal}%` : `$${descMonto.toFixed(0)}`} (-$${descMonto.toFixed(0)})`
       : null
-    const notaCierre = [notaPagos, notaDesc].filter(Boolean).join(' | ') || null
+    const notaPropina = propinaVal > 0 ? `Propina: $${propinaVal.toFixed(0)}` : null
+    const notaCierre = [notaPagos, notaDesc, notaPropina].filter(Boolean).join(' | ') || null
 
     const { error } = await supabase.from('cuentas').update({
       estado:          'cerrada',
       forma_pago:      formaPagoResumen,
       total_cobrado:   total,
+      propina:         propinaVal > 0 ? propinaVal : null,
       cerrada_por:     user.id,
       closed_at:       new Date().toISOString(),
       nota_cierre:     notaCierre,
@@ -218,10 +223,31 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
               <input className="input pl-8" type="number" min="0" placeholder="0" value={descuento} onChange={e => setDescuento(e.target.value)} />
             </div>
 
+            {/* Propina */}
+            <p className="section-title">Propina <span className="normal-case font-normal text-mazul-stone">(opcional)</span></p>
+            <div className="relative mb-4">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-mazul-stone text-sm">$</span>
+              <input className="input pl-8" type="number" min="0" step="0.50" placeholder="0" value={propina} onChange={e => setPropina(e.target.value)} />
+            </div>
+
             {/* Total a pagar */}
-            <div className="bg-mazul-bark/10 rounded-xl px-4 py-3 mb-4 flex justify-between items-center">
-              <span className="text-sm text-mazul-bark font-medium">Total a cobrar</span>
-              <span className="text-lg font-bold text-mazul-bark">${total.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
+            <div className="bg-mazul-bark/10 rounded-xl px-4 py-3 mb-4 space-y-1">
+              {descMonto > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-xs text-mazul-stone">Subtotal con descuento</span>
+                  <span className="text-xs text-mazul-stone">${total.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
+                </div>
+              )}
+              {propinaVal > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-xs text-mazul-amber">🤝 Propina</span>
+                  <span className="text-xs text-mazul-amber">+${propinaVal.toFixed(0)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-sm text-mazul-bark font-medium">Total a cobrar</span>
+                <span className="text-lg font-bold text-mazul-bark">${totalConPropina.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</span>
+              </div>
             </div>
 
             {/* Pagos mixtos */}
@@ -261,7 +287,7 @@ export default function DetalleCuentaModal({ cuenta, onClose, onUpdated }) {
                 {pagoValido ? '✓ Monto correcto' : diferencia > 0 ? `Faltan $${diferencia.toFixed(0)}` : `Excede $${Math.abs(diferencia).toFixed(0)}`}
               </span>
               <span className={`text-sm font-semibold ${pagoValido ? 'text-emerald-700' : 'text-mazul-stone'}`}>
-                ${totalPagado.toFixed(0)} / ${total.toFixed(0)}
+                ${totalPagado.toFixed(0)} / ${totalConPropina.toFixed(0)}
               </span>
             </div>
 
